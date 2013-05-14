@@ -172,7 +172,6 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
         function renderScene(time) {
 
             requestAnimFrame( renderScene );
-            sceneNode.frameCount++;
 			var now = ( performance !== undefined && performance.now !== undefined ) ? performance.now() : time;
 			var timepassed = now - sceneNode.lastTime;
 
@@ -183,7 +182,7 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
 					pss[i].update(timepassed);
 			}
 
-			var camera = sceneNode.camera.threeJScameras[sceneNode.camera.ID];
+			var camera = sceneNode.camera.threeJScameras[ sceneNode.camera.ID ];
 			var pos = camera.localToWorld(new THREE.Vector3(-.4,.275,-1.0))
 			if ( sceneNode.axes !== undefined ) {
                 sceneNode.axes.position = pos;
@@ -193,10 +192,8 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
 
             // Only do a pick every "pickInterval" ms. Defaults to 10 ms.
             // Note: this is a costly operation and should be optimized if possible
-            if((now - lastPickTime) > self.pickInterval)
+            if ( ( now - lastPickTime ) > self.pickInterval )
             {
-                sceneNode.frameCount = 0;
-            
                 var newPick = ThreeJSPick.call( self, mycanvas, sceneNode );
                 
                 var newPickId = newPick ? getPickObjectID.call( view, newPick.object ) : view.state.sceneRootID;
@@ -339,7 +336,6 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
             window._dScene = scene;
             window._dRenderer = renderer;
 			window._dSceneNode = sceneNode;
-            sceneNode.frameCount = 0; // needed for estimating when we're pick-safe
             
             initInputEvents.call(this,mycanvas);
             renderScene((+new Date));
@@ -1486,17 +1482,15 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                                                "descendant-or-self::element(*,'http://vwf.example.com/camera.vwf')" );
         if ( cameraIds.length ) {
 
-            // TODO: Make this work - it isn't now.
-
-            // Save a reference to the active camera
-            var rendererState = sceneView.state;
-            var cameraId = cameraIds[ 0 ];
-            rendererState.cameraInUse = rendererState.nodes[ cameraId ].threeObject;
-
             // Set the active camera
+            var rendererState = sceneView.state;
             var applicationId = vwf_view.kernel.application();
             var sceneNode = rendererState.scenes[ applicationId ];
+            var cameraId = cameraIds[ 0 ];
             sceneNode.camera.ID = cameraId;
+
+            // Save a reference to the active camera
+            rendererState.cameraInUse = rendererState.nodes[ cameraId ].threeObject;
         }
     }
 
