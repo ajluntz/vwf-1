@@ -35,12 +35,15 @@
         }
     }
 
-    function matCpy(mat)
+    function matCpy( mat )
     {
         var ret = [];
-        for(var i =0; i < 16; i++)
-            ret.push(mat[i]);
-        return ret.slice(0);    
+        for ( var i =0; i < mat.length; i++ )
+            ret.push( mat[i] );
+
+        // I don't think there is any reason we need to copy the return array
+        return ret;
+        // return ret.slice(0);    
     }
     
     
@@ -84,14 +87,16 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
         
         creatingNode: function( nodeID, childID, childExtendsID, childImplementsIDs,
                                 childSource, childType, childIndex, childName, callback ) {
-
-            var childURI = nodeID === 0 ? childIndex : undefined;
-
             var self = this;
 
+            // If the parent nodeID is 0, this node is attached directly to the root and is therefore either 
+            // the scene or a prototype.  In either of those cases, save the uri of the new node
+            var childURI = ( nodeID === 0 ? childIndex : undefined );
+
+            // If the node being created is a prototype, construct it and add it to the array of prototypes,
+            // and then return
             var prototypeID = ifPrototypeGetId.call( this, nodeID, childID );
             if ( prototypeID !== undefined ) {
-                //console.log(["CCC   creating prototype Node:",nodeID,childID,childName,childExtendsID,childType]);
                 this.state.prototypes[ prototypeID ] = {
                     parentID: nodeID,
                     ID: childID,
@@ -105,21 +110,26 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                 return;                
             }
             
-            //console.log(["      creatingNode:",nodeID,childID,childName,childExtendsID,childType]);
-            //console.log("Create " + childID);
-            var node = undefined, parentNode, threeChild, threeParent, waiting = false;
+            var node = undefined;
+            var parentNode;
+            var threeChild;
+            var threeParent;
+            var waiting = false;
            
             if ( nodeID )
             {
-                var parentNode = this.state.nodes[nodeID];
+                parentNode = this.state.nodes[ nodeID ];
+
+                // If parent is not a node, see if it is a scene
                 if ( !parentNode )
-                    parentNode = this.state.scenes[nodeID];
+                    parentNode = this.state.scenes[ nodeID ];
+
                 if ( parentNode )
                 {
                     threeParent = parentNode.threeObject ? parentNode.threeObject : parentNode.threeScene;
-                    if(threeParent && childName)
+                    if ( threeParent && childName )
                     {
-                        threeChild = FindChildByName.call(this,threeParent,childName,childExtendsID,false);
+                        threeChild = FindChildByName.call( this,threeParent,childName,childExtendsID,false );
                     }
                 }               
             }
@@ -142,7 +152,11 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                 sceneNode.axes = createAxis.call( this, sceneNode.threeScene );
                 
                 cam.name = 'camera';
-                this.state.cameraInUse = cam;
+
+                // I'm commenting this out so that we can let the view choose which camera to use, rather than
+                // forcing it to use the model-specified one - Eric (5/8/13)
+                // this.state.cameraInUse = cam;
+                
                 var camType = "http://vwf.example.com/camera.vwf";
                 
                 vwf.createChild( childID, "camera", { "extends": camType } );
@@ -176,8 +190,9 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                             var cam = CreateThreeCamera();
                             sceneNode.camera.threeJScameras[ childID ] = cam;
                             
-                             //cam.position.set(0, 0, 0);
-                             //cam.lookAt( sceneNode.threeScene.position );
+                            // Why is this commented out?  Can it go away? - Eric (5/13/13)
+                            //cam.position.set(0, 0, 0);
+                            //cam.lookAt( sceneNode.threeScene.position );
                             
                         }
                         node.name = camName;
@@ -241,7 +256,7 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                     // Most often this callback is used to suspend the queue until the load is complete
                     callback( false );
 
-                    node = this.state.nodes[childID] = {
+                    node = this.state.nodes[ childID ] = {
                         name: childName,  
                         threeObject: threeChild,
                         source: utility.resolveURI( childSource, childURI ),
@@ -251,15 +266,15 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                         type: childExtendsID,
                         // Hang on to the callback and call it again in assetLoaded with ready=true
                         loadingCallback: callback,
-                        sceneID: this.state.sceneRootID,
+                        sceneID: this.state.sceneRootID
                     };
                     loadAsset.call( this, parentNode, node, childType, notifyDriverOfPrototypeAndBehaviorProps );     
-                } else if ( childType == "mesh/definition" ) {
+                }
+                else if ( childType == "mesh/definition" ) {
                     
                     callback( false );
-                    node = this.state.nodes[childID] = {
+                    node = this.state.nodes[ childID ] = {
                         name: childName,  
-                        //threeObject: threeChild,
                         source: utility.resolveURI( childSource, childURI ),
                         ID: childID,
                         parentID: nodeID,
@@ -272,40 +287,48 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                     if ( threeParent !== undefined ) {
                         threeParent.add( node.threeObject ); 
                     } 
-                } else {     
-                        
-                        node = this.state.nodes[childID] = {
-                            name: childName,  
-                            threeObject: threeChild,
-                            source: utility.resolveURI( childSource, childURI ),
-                            ID: childID,
-                            parentID: nodeID,
-                            sourceType: childType,
-                            type: childExtendsID,
-                            //no load callback, maybe don't need this?
-                            //loadingCallback: callback,
-                            sceneID: this.state.sceneRootID,
-                        };
-                        if( !node.threeObject )
-                            node.threeObject = findThreeObjectInParent.call(this,childName,nodeID);
-                        //The parent three object did not have any childrent with the name matching the nodeID, so make a new group
-                        if( !node.threeObject ) {
-                            // doesn't this object need to be added to the parent node
-                            node.threeObject = new THREE.Object3D(); 
-                            node.threeObject.name = childName;
-                            if ( threeParent !== undefined ) {
-                                threeParent.add( node.threeObject ); 
-                            } 
-                        }
+                }
+                else {
+                    node = this.state.nodes[childID] = {
+                        name: childName,  
+                        threeObject: threeChild,
+                        source: utility.resolveURI( childSource, childURI ),
+                        ID: childID,
+                        parentID: nodeID,
+                        sourceType: childType,
+                        type: childExtendsID,
+                        //no load callback, maybe don't need this?
+                        //loadingCallback: callback,
+                        sceneID: this.state.sceneRootID,
+                    };
+                    if( !node.threeObject )
+                        node.threeObject = findThreeObjectInParent.call(this,childName,nodeID);
+                    //The parent three object did not have any childrent with the name matching the nodeID, so make a new group
+                    if( !node.threeObject ) {
+                        // doesn't this object need to be added to the parent node
+                        node.threeObject = new THREE.Object3D(); 
+                        node.threeObject.name = childName;
+                        if ( threeParent !== undefined ) {
+                            threeParent.add( node.threeObject ); 
+                        } 
+                    }
                 }
             
-                if(node && node.threeObject)
+                if ( node && node.threeObject )
                 {
-                    if(!node.threeObject.vwfID) node.threeObject.vwfID = childID;
-                    if(!node.threeObject.name) node.threeObject.name = childName;
+                    if ( !node.threeObject.vwfID )
+                        node.threeObject.vwfID = childID;
+                    if ( !node.threeObject.name )
+                        node.threeObject.name = childName;
                 }
             
             }
+
+            if ( node && node.threeObject )
+                // Add a local model-side transform that can stay pure even if the view changes the
+                // transform on the threeObject - objects that don't yet have a threeObject because
+                // a file needs to load create this transform in assetLoaded
+                node.transform = node.threeObject.matrix;
 
             // If we do not have a load a model for this node, then we are almost done, so we can update all
             // the driver properties w/ the stop-gap function below.
@@ -430,8 +453,8 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
             if(!node) return;
 
             var threeObject = node.threeObject;
-            if(!threeObject)
-            threeObject = node.threeScene;
+            if ( !threeObject )
+                threeObject = node.threeScene;
 
             //if it's a material node, we'll work with the threeMaterial
             //might be more elegant to simply make the node.threeObject the material, but keeping it seperate
@@ -447,132 +470,135 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
             if ( propertyValue !== undefined ) 
             {
                 var self = this;
-                if(threeObject instanceof THREE.Object3D)
+                if ( threeObject instanceof THREE.Object3D )
                 {
-                    if(propertyName == 'transform' || propertyName == 'localMatrix')
+                    if ( propertyName == 'transform' )
                     {
                         //console.info( "setting transform of: " + nodeID + " to " + Array.prototype.slice.call( propertyValue ) );
-                        var transform = goog.vec.Mat4.createFromArray( propertyValue || [] );
+                        var transformMatrix = goog.vec.Mat4.createFromArray( propertyValue || [] );
 
                         // Rotate 90 degress around X to convert from VWF Z-up to GLGE Y-up.
                         if ( threeObject instanceof THREE.Camera ) {
                             
 							var columny = goog.vec.Vec4.create();
-                            goog.vec.Mat4.getColumn( transform, 1, columny );
+                            goog.vec.Mat4.getColumn( transformMatrix, 1, columny );
                             var columnz = goog.vec.Vec4.create();
-                            goog.vec.Mat4.getColumn( transform, 2, columnz );
-                            goog.vec.Mat4.setColumn( transform, 1, columnz );
-                            goog.vec.Mat4.setColumn( transform, 2, goog.vec.Vec4.negate( columny, columny ) );
+                            goog.vec.Mat4.getColumn( transformMatrix, 2, columnz );
+                            goog.vec.Mat4.setColumn( transformMatrix, 1, columnz );
+                            goog.vec.Mat4.setColumn( transformMatrix, 2, goog.vec.Vec4.negate( columny, columny ) );
                         }
 						
-						if(threeObject instanceof THREE.ParticleSystem)
-						{	
-							threeObject.updateTransform(transform);
-						}
-						
-                        threeObject.matrixAutoUpdate = false;
-                        threeObject.matrix.elements = matCpy(transform);
-                        threeObject.updateMatrixWorld(true);
-                        value = propertyValue;  
+                        // Store the value locally
+                        // It must be stored separately from the threeObject so the view can change the
+                        // threeObject's transform to get ahead of the model state without polluting it
+                        node.transform.elements = matCpy( transformMatrix );
+
+                        // If this node has a view-specific transform, that will dictate the transform of
+                        // the local user's  rendered object.
+                        // But if not, the model transform will dictate the transform - done here
+                        if ( !node.viewTransform )
+                        {
+    						if( threeObject instanceof THREE.ParticleSystem )
+    						{	
+                                // I don't see where this function is defined. Maybe a copy-paste bug from
+                                // GLGE driver? - Eric (5/13/13)
+    							threeObject.updateTransform( transformMatrix );
+    						}
+    						
+                            threeObject.matrixAutoUpdate = false;
+                            threeObject.matrix.elements = matCpy(transformMatrix);
+                            threeObject.updateMatrixWorld(true);      
+                        }
+
+                        value = propertyValue;
 
 						//because threejs does not do auto tracking of lookat, we must do it manually.
 						//after updating the matrix for an ojbect, if it's looking at something, update to lookat from
 						//the new position
-						if(threeObject.lookatval)
+						if ( threeObject.lookatval )
 						{
-							this.settingProperty(nodeID,'lookAt',threeObject.lookatval);
+							this.settingProperty( nodeID, 'lookAt', threeObject.lookatval );
 						}
                     }
-                    if(propertyName == 'lookAt')
-                    {     
-					    
+                    else if ( propertyName == 'lookAt' ) {
+
 						threeObject.lookatval = propertyValue;
+
+                        // Function to make the object look at a particular position
+                        // (For use in the following conditional)
+                        var lookAt = function( lookatPosition ) {
+                            var thisPosition = new THREE.Vector3();
+                            var up = new THREE.Vector3();
+                            up.set(0,0,1);
+
+                            thisPosition.getPositionFromMatrix( threeObject.matrix );
+                                
+                            if ( thisPosition.distanceTo( lookatPosition ) > 0 )
+                            {
+                                node.transform.lookAt( thisPosition, lookatPosition, up );
+                                if ( !node.viewTransform ) {
+                                    threeObject.matrix.lookAt( thisPosition, lookatPosition, up );
+                                    threeObject.updateMatrixWorld( true );
+                                }
+                            }
+
+                            value = propertyValue;
+                        }
+
+                        // The position for the object to look at - to be set in the following conditional
+                        var lookatPosition = new THREE.Vector3();
+
                         //Threejs does not currently support auto tracking the lookat,
                         //instead, we'll take the position of the node and look at that.
-                        if(typeof propertyValue == 'string')
-                        {
+                        if ( typeof propertyValue == 'string' ) {
                             
-                            var lookatNode = this.state.nodes[propertyValue];
-                            
+                            var lookatNode = this.state.nodes[ propertyValue ];
                             var lookatObject = null;
-                            if(lookatNode && lookatNode.threeObject) lookatObject = lookatNode.threeObject;
-                            else if(lookatNode &&  lookatNode.threeScene) lookatObject = lookatNode.threeScene;
+                            if ( lookatNode )
+                                if ( lookatNode.threeObject ) 
+                                    lookatObject = lookatNode.threeObject;
+                                else if ( lookatNode.threeScene )
+                                    lookatObject = lookatNode.threeScene;
                             
-                            if(lookatObject)
+                            if ( lookatObject )
                             {
-                                
-                                var lookatPosition = new THREE.Vector3();
-                                var thisPosition = new THREE.Vector3();
-                                var thisMatrix = new THREE.Matrix4();
-                                thisMatrix.elements = matCpy(threeObject.matrix.elements);
-                                
-                                var flipmat = new THREE.Matrix4(-1, 0,0,0,
-                                                            0, 1,0,0,
-                                                            0,0,1,0,
-                                                            0, 0,0,1);
-                               
-                                var up = new THREE.Vector3();
-                                up.set(0,0,1);
                                 lookatPosition.getPositionFromMatrix( lookatObject.matrix );
-                                thisPosition.getPositionFromMatrix( thisMatrix );
-                                
-                                if(thisPosition.distanceTo(lookatPosition) > 0)
-								{
-									threeObject.matrix.lookAt(thisPosition,lookatPosition,up);
-									threeObject.updateMatrixWorld(true); 
-								}
-                                value = propertyValue;                             
+                                lookAt( lookatPosition );                          
                             }
                         
-                        } else if (propertyValue instanceof Array)  {
-                            var lookatPosition = new THREE.Vector3();
-                            var thisPosition = new THREE.Vector3();
-                            var up = new THREE.Vector();
-                            up.set(0,0,1);
-                            lookatPosition.set(propertyValue[0],propertyValue[1],propertyValue[2]);
-                            thisPosition.getPositionFromMatrix( threeObject.matrix );
-                            threeObject.matrix.lookAt(thisPosition,lookatPosition,up);
-                            var flipmat = new THREE.Matrix4(-1, 0,0,0,
-                                                        0, 1,0,0,
-                                                        0,0,1,0,
-                                                        0, 0,0,1);
-                            var matrix = new THREE.Matrix4();
-                            matrix.copy(threeObject.matrix);                        
-                            matrix = matrix.multiplyMatrices(flipmat,matrix);
-                            threeObject.matrix.copy(matrix);
-                            threeObject.updateMatrixWorld(true);
-                            value = propertyValue;   
-                        } else
-						{
-							if(!propertyValue)
-							{
+                        } 
+                        else if ( propertyValue instanceof Array ) {
+                            lookatPosition.set( propertyValue[0], propertyValue[1], propertyValue[2] );
+                            lookAt( lookatPosition );   
+                        }
+                        else {
+							if ( !propertyValue ) {
 								delete threeObject.lookatval;
                                 value = "";
 							}
-						
 						}
                     
                     }
-                    if(propertyName == 'visible')
+                    else if ( propertyName == 'visible' )
                     {
                         //need to walk the tree and hide all sub nodes as well
                         value = Boolean( propertyValue );
                         SetVisible( threeObject, value );
                     }
-                    if(propertyName == 'castShadows')
+                    else if ( propertyName == 'castShadows' )
                     {
                         //debugger;
                         value = Boolean( propertyValue );
                         threeObject.castShadow = value;
                     }
-                    if(propertyName == 'receiveShadows')
+                    else if ( propertyName == 'receiveShadows' )
                     {
                         value = Boolean( propertyValue );
                         threeObject.receiveShadow = value;
                     }
                     //This can be a bit confusing, as the node has a material property, and a material child node. 
                     //setting the property does this, but the code in the component is ambigious
-                    if(propertyName == 'material')
+                    else if ( propertyName == 'material' )
                     {
                         var material = GetMaterial(node.threeObject);
                         if(!material)
@@ -846,18 +872,25 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                                 var sceneNode = this.state.scenes[ this.state.sceneRootID ];
                                 parent.remove(threeObject);
                                 var cam = new THREE.PerspectiveCamera(35,$(document).width()/$(document).height() ,.01,10000);
+                                
+                                // Why are these commented out?  Should they go away? - Eric (5/13/13)
                                 //cam.matrix.elements = [1, 0, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 0, 0, 0, 1];
                                 //CopyProperties(threeObject,cam);
+
                                 cam.far = threeObject.far;
                                 cam.near = threeObject.near;
                                 cam.matrix.elements = matCpy(threeObject.matrix.elements);
                                 cam.matrixAutoUpdate = false;
-                                if(threeObject.fov)
+                                if ( threeObject.fov )
                                     cam.fov = threeObject.fov;
-                                if(threeObject.aspect)
-                                    cam.aspect = threeObject.aspect;    
-                                if(this.state.cameraInUse == threeObject)
+                                if ( threeObject.aspect )
+                                    cam.aspect = threeObject.aspect;  
+
+                                // If the camera we are replacing, is the active camera,
+                                // set the active camera  
+                                if ( this.state.cameraInUse == threeObject )
                                     this.state.cameraInUse = cam;
+
                                 threeObject.updateProjectionMatrix();   
                                 node.threeObject = cam;
                                 sceneNode.camera.threeJScameras[ nodeID ] = cam;
@@ -881,12 +914,16 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                                 cam.near = threeObject.near;
                                 cam.matrix = threeObject.matrix;
                                 cam.matrixAutoUpdate = false;
-                                if(threeObject.fov)
+                                if ( threeObject.fov )
                                     cam.fov = threeObject.fov;
-                                if(threeObject.aspect)
-                                    cam.aspect = threeObject.aspect;    
-                                if(this.state.cameraInUse == threeObject)
+                                if ( threeObject.aspect )
+                                    cam.aspect = threeObject.aspect;
+
+                                // If the camera we are replacing, is the active camera, 
+                                // set the active camera     
+                                if ( this.state.cameraInUse == threeObject )
                                     this.state.cameraInUse = cam;
+
                                 node.threeObject = cam;
                                 sceneNode.camera.threeJScameras[ nodeID ] = cam;
                                 parent.add(node.threeObject);
@@ -933,7 +970,10 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                     {
                         if( this.state.scenes[this.state.sceneRootID].camera.threeJScameras[propertyValue] )
                         {
-                            this.state.cameraInUse = this.state.scenes[this.state.sceneRootID].camera.threeJScameras[propertyValue];
+                            // I'm commenting this out so that we can let the view choose which camera to use,
+                            // rather than forcing it to use the model-specified one - Eric (5/8/13)
+                            // this.state.cameraInUse = this.state.scenes[this.state.sceneRootID].camera.threeJScameras[propertyValue];
+                            
                             this.state.scenes[this.state.sceneRootID].camera.ID = propertyValue;
                             value = propertyValue;
                         }
@@ -1062,6 +1102,9 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                     else if ( propertyName == 'intensity' ) {
                         value = parseFloat( propertyValue );
                         threeObject.intensity = value;
+
+                        // Is this a mistake?  Why do we update the transform matrix after setting light
+                        // intensity? - Eric (5/13/13)
                         threeObject.updateMatrix();
                     }                    
                     else if ( propertyName == 'castShadows' ) {
@@ -1071,7 +1114,6 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
 
                 }
             }
-            //console.log(["                settingProperty: returns ",propertyName,value]);
             return value;
         },
 
@@ -1104,7 +1146,7 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
             {
                 if(propertyName == 'transform')
                 {
-                    value = matCpy(threeObject.matrix.elements); 
+                    value = matCpy( node.transform.elements );
                     
                     if ( threeObject instanceof THREE.Camera ) {
                         var columny = goog.vec.Vec4.create();
@@ -1121,19 +1163,7 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                 {
                     value = threeObject.lookatval;
                     return value;
-                }
-                if(propertyName =='localMatrix')
-                {
-                    value = matCpy(threeObject.matrix.elements); 
-                    return value;
-                }
-                if(propertyName == 'worldMatrix')
-                {
-                    threeObject.updateMatrixWorld(true);
-                    value = matCpy(threeObject.matrixWorld.elements); 
-                    return value;
-                }
-                                    
+                }                 
                 if(propertyName ==  "boundingbox")
                 {
                     value = getBoundingBox.call( this, threeObject, true );
@@ -1770,6 +1800,14 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
                     removed = true;
                 }
             } 
+
+            if ( node.threeObject )
+            {
+                // Add a local model-side transform that can stay pure even if the view changes the
+                // transform on the threeObject - this already happened in creatingNode for those nodes that
+                // didn't need to load a model
+                node.transform = node.threeObject.matrix;
+            }
 
             // Since prototypes are created before the object, it does not get "setProperty" updates for
             // its prototype (and behavior) properties.  Therefore, we cycle through those properties to
@@ -2767,7 +2805,12 @@ define( [ "module", "vwf/model", "vwf/utility", "vwf/utility/color" ], function(
         };
         var bObjBox;
 
-        var objectList = [], obj, wldTrans, bx, foundBBox = 0 ;
+        var objectList = [];
+        var obj;
+        var wldTrans;
+        var bx;
+        var foundBBox = 0 ;
+
         if ( object3.getDescendants ) {
             objectList = object3.getDescendants();
         }
