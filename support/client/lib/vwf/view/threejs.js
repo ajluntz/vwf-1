@@ -182,10 +182,10 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
 			}
 
 			var camera = self.state.cameraInUse;
-			var pos = camera.localToWorld(new THREE.Vector3(-.4,.275,-1.0))
+			var axisWidgetPos = camera.localToWorld( new THREE.Vector3( -0.4, 0.275, -1.0 ) );
 			if ( sceneNode.axes !== undefined ) {
-                sceneNode.axes.position = pos;
-                sceneNode.axes.scale = new THREE.Vector3(.005,.005,.005);
+                sceneNode.axes.position = axisWidgetPos;
+                sceneNode.axes.scale = new THREE.Vector3( 0.005, 0.005, 0.005 );
                 sceneNode.axes.updateMatrix();
             }
 
@@ -289,12 +289,9 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                     mycanvas.width = self.width;
                     sceneNode.renderer.setViewport(0,0,window.innerWidth,window.innerHeight)
 					
-					view.state.cameraInUse.aspect =  mycanvas.width / mycanvas.height;
-					view.state.cameraInUse.updateProjectionMatrix()
-                    //var cam = self.state.cameraInUse;
-                    //if ( cam ) {
-                    //    cam.aspect = mycanvas.width / mycanvas.height;
-                    //}
+					var viewCam = view.state.cameraInUse;
+                    viewCam.aspect =  mycanvas.width / mycanvas.height;
+					viewCam.updateProjectionMatrix();
                 }
             }
 
@@ -328,7 +325,8 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
 
             // Set the camera that the view will render from
             // It starts here as that dictated by the model until the view tells it otherwise
-            this.state.cameraInUse = sceneNode.camera.threeJScameras[ sceneNode.camera.ID ];
+            var modelCameraInfo = sceneNode.camera;
+            this.state.cameraInUse = modelCameraInfo.threeJScameras[ modelCameraInfo.ID ];
 
             // Schedule the renderer.
             var scene = sceneNode.threeScene;
@@ -479,7 +477,7 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                 origin: pickInfo ? pickInfo.worldCamPos : undefined,
                 globalPosition: pickInfo ? [pickInfo.point.x,pickInfo.point.y,pickInfo.point.z] : undefined,
                 globalNormal: pickInfo ? [0,0,1] : undefined,    //** not implemented by threejs
-                globalSource: worldCamPos,            
+                globalSource: worldCamPos
             } ] };
 
             if ( pickInfo && pickInfo.normal ) {
@@ -495,11 +493,11 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                 var child = sceneView.state.nodes[ childID ];
                 var parentID = child.parentID;
                 var parent = sceneView.state.nodes[ child.parentID ];
-                var trans, parentTrans, localTrans, localNormal, parentInverse, relativeCamPos;
+                var transform, parentTrans, localTrans, localNormal, parentInverse, relativeCamPos;
                 while ( child ) {
 
-                    trans = goog.vec.Mat4.createFromArray( child.threeObject.matrix.elements );
-                    goog.vec.Mat4.transpose( trans, trans );                   
+                    transform = goog.vec.Mat4.createFromArray( child.threeObject.matrix.elements );
+                    goog.vec.Mat4.transpose( transform, transform );                   
                     
                     if ( parent ) {                   
                         parentTrans = goog.vec.Mat4.createFromArray( parent.threeObject.matrix.elements );
@@ -508,12 +506,12 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                         parentTrans = undefined;
                     }
 
-                    if ( trans && parentTrans ) {
+                    if ( transform && parentTrans ) {
                         // get the parent inverse, and multiply by the world
                         // transform to get the local transform 
                         parentInverse = goog.vec.Mat4.create();
                         if ( goog.vec.Mat4.invert( parentTrans, parentInverse ) ) {
-                            localTrans = goog.vec.Mat4.multMat( parentInverse, trans,
+                            localTrans = goog.vec.Mat4.multMat( parentInverse, transform,
                                 goog.vec.Mat4.create()                       
                             );
                         }
@@ -521,14 +519,14 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
 
                     // transform the global normal into local
                     if ( pickInfo && pickInfo.normal ) {
-                        localNormal = goog.vec.Mat4.multVec3Projective( trans, pickInfo.normal, 
+                        localNormal = goog.vec.Mat4.multVec3Projective( transform, pickInfo.normal, 
                             goog.vec.Vec3.create() );
                     } else {
                         localNormal = undefined;  
                     }
 
                     if ( worldCamPos ) { 
-                        relativeCamPos = goog.vec.Mat4.multVec3Projective( trans, worldCamPos, 
+                        relativeCamPos = goog.vec.Mat4.multVec3Projective( transform, worldCamPos, 
                             goog.vec.Vec3.create() );                         
                     } else { 
                         relativeCamPos = undefined;
@@ -683,12 +681,97 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
 
         canvas.setAttribute("onmousewheel", '');
         
+        // TEMPNAV: This is part of a temporary example of navigation - 
+        //          to be replaced by better navigation soon
+        this.input = {
+            "move": [ 0, 0 ],
+            "look": [ 0, 0 ],
+            "lastInputTime": undefined
+        };
+
+        this.move = function( x, y ) {
+
+            // Transform the displacement vector from camera coordinates
+            // to the coordinates of the camera's parent
+            var translation = this.getCameraVec( x, y, 0 );
+
+            // Eliminate any z component that might have crept in
+            translation[ 2 ] = 0;
+
+            if ( goog.vec.Vec3.magnitudeSquared( translation ) > goog.vec.EPSILON ) {
+
+                var camera = this.state.cameraInUse;
+                var cameraTransformArray = camera.matrix.elements;
+                var cameraPos = [ cameraTransformArray[ 12 ], 
+                                  cameraTransformArray[ 13 ], 
+                                  cameraTransformArray[ 14 ] ];
+                
+                // Take the direction specified by the translation direction and apply a calculated magnitude 
+                // to that direction to compute the displacement vector
+                goog.vec.Vec3.scale( goog.vec.Vec3.normalize( translation, translation ), this.distance(), 
+                                     translation );
+
+                // Add the displacement to the current camera position
+                cameraPos = goog.vec.Vec3.add( cameraPos, translation, cameraPos );
+
+                // Insert the new camera position in the camera transform
+                cameraTransformArray[ 12 ] = cameraPos [ 0 ];
+                cameraTransformArray[ 13 ] = cameraPos [ 1 ];
+                cameraTransformArray[ 14 ] = cameraPos [ 2 ];
+
+                // Force the camera's world transform to update from its local transform
+                camera.updateMatrixWorld( true );
+            }
+        }
+
+        this.look = function() {
+
+        }
+
+        this.cameraZ = function() {
+
+        }
+
+        this.getCameraVec = function( x, y, z ) {
+            var camRotMat = goog.vec.Mat4.createFromArray( this.state.cameraInUse.matrix.elements );
+            
+            // Remove translation component, so it is only a rotation matrix
+            camRotMat[ 12 ] = 0;
+            camRotMat[ 13 ] = 0;
+            camRotMat[ 14 ] = 0;
+
+            var camAt = goog.vec.Mat4.multVec4(
+              camRotMat,
+              goog.vec.Vec4.createFromValues( x, z, -y, 1 ), // Accounts for z-up (VWF) to y-up (three.js) change
+              goog.vec.Vec3.create()
+            );
+            return camAt;      
+        }
+
+        this.translationSpeed = 1;
+
+        this.distance = function(){
+            var dist = this.translationSpeed;
+            if(this.timeElapsed() > 0)
+                dist = dist * this.timeElapsed();
+            return dist;
+        }
+
+        this.timeElapsed = function() {
+            var currTime = +new Date;
+            var timeElapsed = currTime - this.input.lastInputTime;
+            if ( !this.input.lastInputTime || timeElapsed > 1 )
+                timeElapsed = 1;  
+            return timeElapsed;
+        }
+        // END TEMPNAV
+
         window.onkeydown = function (event) {
                     
                     var key = undefined;
                     var validKey = false;
                     var keyAlreadyDown = false;
-                    switch (event.keyCode) {
+                    switch ( event.keyCode ) {
                         case 17:
                         case 16:
                         case 18:
@@ -700,6 +783,51 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                             keyAlreadyDown = !!sceneView.keyStates.keysDown[key.key];
                             sceneView.keyStates.keysDown[key.key] = key;
                             validKey = true;
+
+                            // TEMPNAV: This is part of a temporary example of navigation - 
+                            //          to be replaced by better navigation soon
+                            self.input.look = [ 0, 0 ];
+                            self.input.move = [ 0, 0 ];
+                            var deltaZ = 0;
+                            switch ( event.keyCode ) {
+                                case 87:  //w
+                                case 38:  //up
+                                    self.input.move[1] += 1;
+                                    break;
+                                case 83:  //s
+                                case 40:  //down
+                                    self.input.move[1] += -1;
+                                    break;
+                                case 37: // left              
+                                case 65:  //a
+                                    self.input.move[0] += -1;
+                                    break;
+                                case 39: // right              
+                                case 68:  //d
+                                    self.input.move[0] += 1;
+                                    break;
+                                case 81: // q
+                                    self.input.look[0] += -1;
+                                    break;
+                                case 69: // e
+                                    self.input.look[0] += 1;
+                                    break;
+                                case 82: // r
+                                    deltaZ += 1.0;
+                                    break;
+                                case 67: // c
+                                    deltaZ += - 1.0;
+                                    break;
+                            }
+                            if ( self.input.look[0] != 0 || self.input.look[1] != 0 )
+                                self.look( self.input.look[0], self.input.look[1] );
+                            if ( self.input.move[0] != 0 || self.input.move[1] != 0 )
+                                self.move( self.input.move[0], self.input.move[1] );
+                            if ( deltaZ != 0 )
+                                self.cameraZ( deltaZ );
+                            self.input.lastInputTime = +new Date;
+                            // END TEMPNAV
+
                             break;
                     }
 
@@ -715,6 +843,8 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                         sceneView.kernel.dispatchEvent(sceneNode.ID, "keyDown", [sceneView.keyStates]);
                     }
                 };
+
+
 
          window.onkeyup = function (event) {
                     var key = undefined;
