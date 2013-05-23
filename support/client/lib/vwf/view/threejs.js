@@ -57,6 +57,16 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                 
                 initScene.call(this,this.state.scenes[childID]);
             }
+
+            //Temporary workaround until the callback functionality is implemented for kernel.createChild()
+            //Listening specifically for this.findNavObject>>createChild() creating a new navObject if one does not exist.
+            //Can be removed once kernel.createChild callback works properly
+            var sceneView = this;
+            var clientThatIssuedEvent = this.kernel.client();
+            var me = this.kernel.moniker();
+            if (clientThatIssuedEvent == me) 
+                controlNavObject.call( sceneView, sceneView.state.nodes [childID] );
+            //End temporary workaround
         },
 
         initializedNode: function( nodeID, childID ) {
@@ -202,48 +212,52 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
             }
 
             var camera = self.state.cameraInUse;
-            var axisWidgetPos = camera.localToWorld( new THREE.Vector3( -0.4, 0.275, -1.0 ) );
-            if ( sceneNode.axes !== undefined ) {
-                sceneNode.axes.position = axisWidgetPos;
-                sceneNode.axes.scale = new THREE.Vector3( 0.005, 0.005, 0.005 );
-                sceneNode.axes.updateMatrix();
-            }
 
-            // Only do a pick every "pickInterval" ms. Defaults to 10 ms.
-            // Note: this is a costly operation and should be optimized if possible
-            if ( ( now - lastPickTime ) > self.pickInterval )
-            {
-                var newPick = ThreeJSPick.call( self, mycanvas, sceneNode );
-                
-                var newPickId = newPick ? getPickObjectID.call( view, newPick.object ) : view.state.sceneRootID;
-                if ( self.lastPickId != newPickId && self.lastEventData )
+            if (camera !== undefined) {
+
+                var axisWidgetPos = camera.localToWorld( new THREE.Vector3( -0.4, 0.275, -1.0 ) );
+                if ( sceneNode.axes !== undefined ) {
+                    sceneNode.axes.position = axisWidgetPos;
+                    sceneNode.axes.scale = new THREE.Vector3( 0.005, 0.005, 0.005 );
+                    sceneNode.axes.updateMatrix();
+                }
+
+                // Only do a pick every "pickInterval" ms. Defaults to 10 ms.
+                // Note: this is a costly operation and should be optimized if possible
+                if ( ( now - lastPickTime ) > self.pickInterval )
                 {
-                    view.kernel.dispatchEvent( self.lastPickId, "pointerOut", self.lastEventData.eventData, self.lastEventData.eventNodeData );
-                    view.kernel.dispatchEvent( newPickId, "pointerOver", self.lastEventData.eventData, self.lastEventData.eventNodeData );
-                }
-                
-                self.lastPickId = newPickId
-                self.lastPick = newPick;
-                if ( view.lastEventData && 
-                     ( view.lastEventData.eventData[0].screenPosition[0] != oldMouseX || 
-                       view.lastEventData.eventData[0].screenPosition[1] != oldMouseY ) ) {
-                    oldMouseX = view.lastEventData.eventData[0].screenPosition[0];
-                    oldMouseY = view.lastEventData.eventData[0].screenPosition[1];
-                    hovering = false;
-                }
-                else if(self.lastEventData && self.mouseOverCanvas && !hovering && self.lastPick) {
-                    var pickId = getPickObjectID.call( view, self.lastPick.object, false );
-                    if(!pickId) {
-                        pickId = view.state.sceneRootID;
+                    var newPick = ThreeJSPick.call( self, mycanvas, sceneNode );
+                    
+                    var newPickId = newPick ? getPickObjectID.call( view, newPick.object ) : view.state.sceneRootID;
+                    if ( self.lastPickId != newPickId && self.lastEventData )
+                    {
+                        view.kernel.dispatchEvent( self.lastPickId, "pointerOut", self.lastEventData.eventData, self.lastEventData.eventNodeData );
+                        view.kernel.dispatchEvent( newPickId, "pointerOver", self.lastEventData.eventData, self.lastEventData.eventNodeData );
                     }
-                    view.kernel.dispatchEvent( pickId, "pointerHover", self.lastEventData.eventData, self.lastEventData.eventNodeData );
-                    hovering = true;
+                    
+                    self.lastPickId = newPickId
+                    self.lastPick = newPick;
+                    if ( view.lastEventData && 
+                         ( view.lastEventData.eventData[0].screenPosition[0] != oldMouseX || 
+                           view.lastEventData.eventData[0].screenPosition[1] != oldMouseY ) ) {
+                        oldMouseX = view.lastEventData.eventData[0].screenPosition[0];
+                        oldMouseY = view.lastEventData.eventData[0].screenPosition[1];
+                        hovering = false;
+                    }
+                    else if(self.lastEventData && self.mouseOverCanvas && !hovering && self.lastPick) {
+                        var pickId = getPickObjectID.call( view, self.lastPick.object, false );
+                        if(!pickId) {
+                            pickId = view.state.sceneRootID;
+                        }
+                        view.kernel.dispatchEvent( pickId, "pointerHover", self.lastEventData.eventData, self.lastEventData.eventNodeData );
+                        hovering = true;
+                    }
+                    lastPickTime = now;
                 }
-                lastPickTime = now;
-            }
 
-            renderer.render( scene, camera );
-            sceneNode.lastTime = now;
+                renderer.render( scene, camera );
+                sceneNode.lastTime = now;
+            }
         };
 
         var mycanvas = this.canvasQuery.get( 0 );
@@ -1715,7 +1729,7 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
     var navObject = undefined;
 
     function controlNavObject( node ) {
-        
+      
         var sceneView = this;
 
         // Disable the viewTransform from the old navigation object that doesn't need it anymore
@@ -1784,6 +1798,7 @@ define( [ "module", "vwf/view", "vwf/utility" ], function( module, view, utility
                     "owner": thisUserId
                 }
             };
+
             sceneView.kernel.createChild( sceneRootID, "navobj_" + thisUserId, navObjectSpec, 
                                           undefined, undefined, function( nodeID ) {
                 controlNavObject.call( sceneView, sceneView.state.nodes[ nodeID ] );
